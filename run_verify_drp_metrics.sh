@@ -16,8 +16,8 @@ fail() {
 
 check_env_vars() {
   local req_vars=(
-    LSST_VALIDATE_DRP_GEN3_DATASET
-    LSST_VALIDATE_DRP_GEN3_DATASET_DIR
+    LSST_VERIFY_DRP_METRICS_DATASET
+    LSST_VERIFY_DRP_METRICS_DATASET_DIR
   )
 
   local err
@@ -84,18 +84,18 @@ check_env_vars
 
 set +o xtrace
 
-# if _CODE_DIR is defined, set that up instead of the default validate_drp
+# if _CODE_DIR is defined, set that up instead of the default verify_drp_metrics
 # product
-if [[ -n $LSST_VALIDATE_DRP_GEN3_CODE_DIR ]]; then
-  setup -k -r "$LSST_VALIDATE_DRP_GEN3_CODE_DIR"
+if [[ -n $LSST_VERIFY_DRP_METRICS_CODE_DIR ]]; then
+  setup -k -r "$LSST_VERIFY_DRP_METRICS_CODE_DIR"
 else
   setup faro
 fi
 
-setup -k -r "$LSST_VALIDATE_DRP_GEN3_DATASET_DIR"
+setup -k -r "$LSST_VERIFY_DRP_METRICS_DATASET_DIR"
 set -o xtrace
 
-case "$LSST_VALIDATE_DRP_GEN3_DATASET" in
+case "$LSST_VERIFY_DRP_METRICS_DATASET" in
   validation_data_cfht)
     RUN="$FARO_DIR/bin/measureCFHTMetrics.sh"
     ;;
@@ -103,10 +103,10 @@ case "$LSST_VALIDATE_DRP_GEN3_DATASET" in
     RUN="$FARO_DIR/bin/measureDecamMetrics.sh"
     ;;
   validation_data_hsc)
-    RUN="$FARO_DIR/bin/measureHscMetrics.sh"
+    RUN="$FARO_DIR/bin/measureHscRC2Metrics.sh"
     ;;
   *)
-    >&2 echo "Unknown DATASET: ${LSST_VALIDATE_DRP_DATASET}"
+    >&2 echo "Unknown DATASET: ${LSST_VERIFY_DRP_METRICS_DATASET}"
     exit 1
     ;;
 esac
