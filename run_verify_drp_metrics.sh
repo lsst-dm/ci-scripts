@@ -102,7 +102,7 @@ case "$LSST_VERIFY_DRP_METRICS_DATASET" in
   validation_data_decam)
     RUN="$FARO_DIR/bin/measureDecamMetrics.sh"
     ;;
-  validation_data_hsc)
+  rc2_subset)
     RUN="$FARO_DIR/bin/measureHscRC2Metrics.sh"
     ;;
   *)
