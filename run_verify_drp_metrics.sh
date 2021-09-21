@@ -102,8 +102,8 @@ case "$LSST_VERIFY_DRP_METRICS_DATASET" in
   validation_data_decam)
     RUN="$FARO_DIR/bin/measureDecamMetrics.sh"
     ;;
-  rc2_subset)
-    RUN="$FARO_DIR/bin/measureHscRC2Metrics.sh"
+  validation_data_hsc)
+    RUN="$LSST_VERIFY_DRP_METRICS_DATASET_DIR/bin/measureHscRC2Metrics.sh"
     ;;
   *)
     >&2 echo "Unknown DATASET: ${LSST_VERIFY_DRP_METRICS_DATASET}"
