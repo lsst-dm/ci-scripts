@@ -93,7 +93,16 @@ else
 fi
 
 setup -k -r "$LSST_VERIFY_DRP_METRICS_DATASET_DIR"
+
 set -o xtrace
+
+############ This is a hack to get around the fact that jointcal uses configs that are stripped in the container
+git clone https://github.com/lsst/jointcal
+cd jointcal
+setup -k -r .
+scons
+cd ..
+########### 
 
 case "$LSST_VERIFY_DRP_METRICS_DATASET" in
   validation_data_cfht)
