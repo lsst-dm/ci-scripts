@@ -100,8 +100,8 @@ set -o xtrace
 
 git clone https://github.com/lsst/jointcal
 (
-setup -k -r .
 cd jointcal
+setup -k -r .
 scons
 )
 setup -k -r jointcal
