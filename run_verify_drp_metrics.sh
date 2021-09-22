@@ -99,11 +99,12 @@ set -o xtrace
 ############ This is a hack to get around the fact that jointcal uses configs that are stripped in the container
 
 git clone https://github.com/lsst/jointcal
-setup -k -r jointcal
 (
+setup -k -r .
 cd jointcal
 scons
 )
+setup -k -r jointcal
 ########### 
 
 case "$LSST_VERIFY_DRP_METRICS_DATASET" in
