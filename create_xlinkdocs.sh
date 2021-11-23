@@ -32,7 +32,7 @@ usage() {
 		 type: either <git-branch>,  \"stable\", or \"beta\"
 		 path: actual path to the publicly accessible DM doxygen documentation
 
-		 Example: $0 --type master --path /home/foo/public_html/doxygen
+		 Example: $0 --type main --path /home/foo/public_html/doxygen
 		 Example: $0 --type Winter2012 ---path /home/foo/public_html/doxygen
 		 Example: $0 --type stable --path /home/foo/public_html/doxygen
 
@@ -61,14 +61,14 @@ fi
 DATE="$(date +%Y)_$(date +%m)_$(date +%d)_$(date +%H.%M.%S)"
 
 # Normative doxy_type needs to be one of {normative(<branch>), beta, stable}
-#   but doxy_type for master branch will now change to the tag name used
-#   for a master build
+#   but doxy_type for main branch will now change to the tag name used
+#   for a main build
 NORMATIVE_DOXY_TYPE=$(echo "$DOXY_TYPE" | tr  "/" "_")
-if [[ $DOXY_TYPE == master ]]; then
+if [[ $DOXY_TYPE == main ]]; then
   eval "$(grep -E '^BUILD=' "$LSSTSW_BUILD_DIR"/manifest.txt)"
   echo "BUILD: $BUILD"
   if [[ -z $BUILD ]]; then
-    fail "*** Failed: to determine most recent master build number."
+    fail "*** Failed: to determine most recent main build number."
   else
     DOXY_TYPE=$BUILD
   fi
@@ -107,7 +107,7 @@ if ! ( set -e
   # Ensure fresh extraction
   rm -rf "$DOC_REPO_DIR"
 
-  # SCM clone lsstDoxygen ** from master **
+  # SCM clone lsstDoxygen ** from default branch **
   git clone "$DOC_REPO_URL" "$DOC_REPO_DIR"
 ); then
   fail "*** Failed to clone '$DOC_REPO_URL'."

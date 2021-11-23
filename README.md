@@ -1,8 +1,6 @@
 ci-scripts
 ===
 
-[![Build Status](https://travis-ci.org/lsst-sqre/ci-scripts.png)](https://travis-ci.org/lsst-sqre/ci-scripts)
-
 This repo began as an import of the state of lsst-dev:/home/buildbot/RHEL6/scripts
 as of 2015-03-17.  These scripts were invoked by the buildbot worker that
 was running on lsst-dev; they are now invoked by Jenkins agents.
