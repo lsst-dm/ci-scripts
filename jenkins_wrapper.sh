@@ -55,7 +55,7 @@ fatal_vars() {
   )
   local found=()
 
-  for v in ${verboten[*]}; do
+  for v in "${verboten[@]}"; do
     if [[ -n ${!v+1} ]]; then
       found+=("$v")
       >&2 echo -e "${v} is not supported"

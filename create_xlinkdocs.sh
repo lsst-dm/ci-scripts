@@ -98,7 +98,7 @@ settings=(
   SYM_LINK_PATH
 )
 
-for i in ${settings[*]}
+for i in "${settings[@]}"
 do
   echo "${i}: ${!i}"
 done

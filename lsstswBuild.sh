@@ -129,7 +129,7 @@ settings=(
 )
 
 set_color "$LIGHT_CYAN"
-for i in ${settings[*]}
+for i in "${settings[@]}"
 do
   echo "${i}: ${!i}"
 done
@@ -138,6 +138,16 @@ no_color
 end_section # configuration
 
 export EUPSPKG_NJOBS=${K8S_DIND_LIMITS_CPU:-8}
+# Disable implicit threading in libraries since we're parallelizing ourselves
+export GOTO_NUM_THREADS=1
+export MKL_DOMAIN_NUM_THREADS=1
+export MKL_NUM_THREADS=1
+export MPI_NUM_THREADS=1
+export NUMEXPR_MAX_THREADS=1
+export NUMEXPR_NUM_THREADS=1
+export OMP_NUM_THREADS=1
+export OPENBLAS_NUM_THREADS=1
+export RAYON_NUM_THREADS=1
 
 #
 # display environment variables
@@ -166,7 +176,7 @@ ARGS=()
 [[ $PREP_ONLY == true ]] && ARGS+=('-p')
 
 [[ ${#REF_LIST[@]} -ne 0 ]] &&
-  for r in ${REF_LIST[*]}; do
+  for r in "${REF_LIST[@]}"; do
     ARGS+=('-r' "$r")
   done
 [[ ${#PRODUCT_LIST[@]} -ne 0 ]] &&
