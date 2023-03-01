@@ -129,7 +129,7 @@ settings=(
 )
 
 set_color "$LIGHT_CYAN"
-for i in ${settings[*]}
+for i in "${settings[@]}"
 do
   echo "${i}: ${!i}"
 done
@@ -176,7 +176,7 @@ ARGS=()
 [[ $PREP_ONLY == true ]] && ARGS+=('-p')
 
 [[ ${#REF_LIST[@]} -ne 0 ]] &&
-  for r in ${REF_LIST[*]}; do
+  for r in "${REF_LIST[@]}"; do
     ARGS+=('-r' "$r")
   done
 [[ ${#PRODUCT_LIST[@]} -ne 0 ]] &&

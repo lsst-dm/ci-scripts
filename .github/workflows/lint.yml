@@ -31,6 +31,8 @@ jobs:
 
       - name: shellcheck
         uses: ludeeus/action-shellcheck@master
+        with:
+          check_together: 'yes'
 
       - name: Set up Python
         uses: actions/setup-python@v3
