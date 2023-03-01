@@ -1,0 +1,44 @@
+name: lint
+
+on:
+  push:
+    branches:
+      - master
+  pull_request:
+
+jobs:
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+
+      - name: Set up Ruby
+        uses: ruby/setup-ruby@v1
+        with:
+          ruby-version: '2.5'
+
+      - name: Install Ruby dependencies
+        run: bundle install
+
+      - name: rubocop
+        run: bundle exec rubocop
+
+      # - name: rspec-bash
+      #   run: bundle exec rspec --format doc
+
+      - name: markdownlint
+        uses: actionshub/markdownlint@main
+
+      - name: shellcheck
+        uses: ludeeus/action-shellcheck@master
+
+      - name: Set up Python
+        uses: actions/setup-python@v3
+        with:
+          python-version: "3.10"
+
+      - name: Install yamllint
+        run: pip install yamllint
+
+      - name: yamllint
+        run: yamllint .
