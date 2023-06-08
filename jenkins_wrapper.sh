@@ -81,21 +81,6 @@ cc::setup_first "$LSST_COMPILER"
 
 export LSSTSW=${LSSTSW:-$WORKSPACE/lsstsw}
 
-
-case $(uname -s) in
-  Darwin*)
-    if ! hash gfortran; then
-      echo "gfortran is required but missing"
-      # gfortran is part of the gcc bottle
-      brew install gcc
-    fi
-    if ! hash cmake; then
-      echo "cmake is required but missing"
-      brew install cmake
-    fi
-    ;;
-esac
-
 cd "$LSSTSW"
 
 OPTS=()
