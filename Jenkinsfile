@@ -20,7 +20,7 @@ tests['shellcheck'] = {
     dir('lsstsw') {
       git([
         url: 'https://github.com/lsst/lsstsw',
-        branch: 'master',
+        branch: 'main',
       ])
     }
 
