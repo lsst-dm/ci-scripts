@@ -64,14 +64,12 @@ DATE="$(date +%Y)_$(date +%m)_$(date +%d)_$(date +%H.%M.%S)"
 #   but doxy_type for main branch will now change to the tag name used
 #   for a main build
 NORMATIVE_DOXY_TYPE=$(echo "$DOXY_TYPE" | tr  "/" "_")
-if [[ $DOXY_TYPE == main ]]; then
-  eval "$(grep -E '^BUILD=' "$LSSTSW_BUILD_DIR"/manifest.txt)"
-  echo "BUILD: $BUILD"
-  if [[ -z $BUILD ]]; then
-    fail "*** Failed: to determine most recent main build number."
-  else
-    DOXY_TYPE=$BUILD
-  fi
+eval "$(grep -E '^BUILD=' "$LSSTSW_BUILD_DIR"/manifest.txt)"
+echo "BUILD: $BUILD"
+if [[ -z $BUILD ]]; then
+  fail "*** Failed: to determine most recent main build number."
+else
+  DOXY_TYPE=$BUILD
 fi
 
 SYM_LINK_NAME="x_${NORMATIVE_DOXY_TYPE}DoxyDoc"
