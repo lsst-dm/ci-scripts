@@ -204,7 +204,7 @@ if [[ $BUILD_DOCS == true ]]; then
   start_section "doc build"
 
   print_info "Start Documentation build at: $(date)"
-  if [[ "${REF_LIST[0]}" == "v*" ]]; then
+  if [[ "${REF_LIST[0]}" == v* ]]; then
     DOC_TYPE="${REF_LIST[0]}"
   else
     DOC_TYPE="main"
