@@ -137,7 +137,7 @@ no_color
 
 end_section # configuration
 
-export EUPSPKG_NJOBS=${K8S_DIND_LIMITS_CPU:-8}
+export EUPSPKG_NJOBS=${EUPSPKG_NJOBS:-8}
 # Disable implicit threading in libraries since we're parallelizing ourselves
 export GOTO_NUM_THREADS=1
 export MKL_DOMAIN_NUM_THREADS=1
