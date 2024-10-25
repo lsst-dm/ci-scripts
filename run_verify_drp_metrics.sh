@@ -105,8 +105,14 @@ cd jointcal
 setup -k cpputils
 scons
 )
-########### 
+###########
 
+# pipe_drivers mpi implementation uses one core for orchestration, so we
+# need to set NUMPROC to the number of cores to utilize + 1
+MEM_PER_CORE=2.0
+export NUMPROC=$(($(target_cores $MEM_PER_CORE) + 1))
+
+ARGS=""
 case "$LSST_VERIFY_DRP_METRICS_DATASET" in
   validation_data_cfht)
     RUN="$FARO_DIR/bin/measureCFHTMetrics.sh"
@@ -115,7 +121,10 @@ case "$LSST_VERIFY_DRP_METRICS_DATASET" in
     RUN="$FARO_DIR/bin/measureDecamMetrics.sh"
     ;;
   rc2_subset)
-    RUN="$LSST_VERIFY_DRP_METRICS_DATASET_DIR/bin/measureHscRC2Metrics.sh"
+    RUN="$LSST_VERIFY_DRP_METRICS_DATASET_DIR/bin/run_rc2_subset.sh"
+    export RC2_SUBSET_PROC=$NUMPROC
+    export RC2_SUBSET_COLL=jenkins
+    ARGS="--run"
     ;;
   *)
     >&2 echo "Unknown DATASET: ${LSST_VERIFY_DRP_METRICS_DATASET}"
@@ -123,23 +132,12 @@ case "$LSST_VERIFY_DRP_METRICS_DATASET" in
     ;;
 esac
 
-# pipe_drivers mpi implementation uses one core for orchestration, so we
-# need to set NUMPROC to the number of cores to utilize + 1
-MEM_PER_CORE=2.0
-export NUMPROC=$(($(target_cores $MEM_PER_CORE) + 1))
-
 set +e
-"$RUN"
+"$RUN" "$ARGS"
 run_status=$?
 set -e
 
 echo "${RUN##*/} - exit status: ${run_status}"
-RESULTS=(validate_drp*)
-# bail out if the drp output file is missing
-if [[ ! -e "${RESULTS[0]}" ]]; then
-  echo "drp result files do not exist"
-  exit 1
-fi
 
 exit $run_status
 
