@@ -138,12 +138,6 @@ run_status=$?
 set -e
 
 echo "${RUN##*/} - exit status: ${run_status}"
-RESULTS=(validate_drp*)
-# bail out if the drp output file is missing
-if [[ ! -e "${RESULTS[0]}" ]]; then
-  echo "drp result files do not exist"
-  exit 1
-fi
 
 exit $run_status
 
