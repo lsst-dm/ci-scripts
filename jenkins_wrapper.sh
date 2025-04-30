@@ -41,6 +41,7 @@ LSST_SPLENV_REF=${LSST_SPLENV_REF?LSST_SPLENV_REF is required}
 LSST_BUILD_DOCS=${LSST_BUILD_DOCS:-false}
 LSST_DEPLOY_MODE=${LSST_DEPLOY_MODE:-}
 LSST_NO_FETCH=${LSST_NO_FETCH:-false}
+LSST_NO_BINARY_FETCH=${LSST_NO_BINARY_FETCH:-false}
 LSST_PREP_ONLY=${LSST_PREP_ONLY:-false}
 LSST_REFS=${LSST_REFS:-}
 
@@ -49,6 +50,7 @@ fatal_vars() {
     BRANCH
     deploy
     NO_FETCH
+    NO_BINARY_FETCH
     PRODUCT
     SKIP_DEMO
     SKIP_DOCS
@@ -75,6 +77,7 @@ ARGS+=('--color')
 
 [[ $LSST_BUILD_DOCS == true ]] && ARGS+=('--docs')
 [[ $LSST_NO_FETCH == true ]] &&   ARGS+=('--no-fetch')
+[[ $LSST_NO_BINARY_FETCH == true ]] &&   ARGS+=('--no-binary-fetch')
 [[ $LSST_PREP_ONLY == true ]] &&  ARGS+=('--prepare-only')
 
 cc::setup_first "$LSST_COMPILER"
