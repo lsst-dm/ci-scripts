@@ -44,7 +44,6 @@ LSST_NO_FETCH=${LSST_NO_FETCH:-false}
 LSST_NO_BINARY_FETCH=${LSST_NO_BINARY_FETCH:-true}
 LSST_PREP_ONLY=${LSST_PREP_ONLY:-false}
 LSST_REFS=${LSST_REFS:-}
-echo "$LSST_NO_BINARY_FETCH"
 
 fatal_vars() {
   local verboten=(
