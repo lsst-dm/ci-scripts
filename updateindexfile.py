@@ -1,5 +1,6 @@
 import json
 import subprocess
+import tempfile
 
 TMPFILE = "/tmp/index.json"
 # We should look for a way to get the names automatically. GCP sdk was not able to help with this.
@@ -20,19 +21,21 @@ def update_helper(loc):
     indexdata = subprocess.run(
         ["gcloud", "storage", "ls", target], capture_output=True, check=True, text=True
     )
-    indexdata = indexdata.stdout.rsplit()
-    index = []
+    indexdata = indexdata.stdout.split()
+    index = [i.split("/")[-1] for i in indexdata]
     for i in indexdata:
         index.append(i.split("/")[-1])
-    indexjson = json.dumps(index)
-    with open(TMPFILE, "w") as f:
-        f.write(indexjson)
-    print("Fetched files")
-    copy = subprocess.run(
-        ["gcloud", "storage", "cp", TMPFILE, target], capture_output=True, check=True, text=True
-    )
-    if copy.returncode == 0:
-        print("updated index.json")
+    with tempfile.NamedTemporaryFile("w", delete_on_close=False) as tmpfile:
+        json.dump(index, tmpfile)
+        print("Fetched files")
+        copy = subprocess.run(
+            ["gcloud", "storage", "cp", tmpfile.name, target + "/index.json"],
+            capture_output=True,
+            check=True,
+            text=True,
+        )
+        if copy.returncode == 0:
+            print("updated index.json")
 
 
 for p in platforms:
