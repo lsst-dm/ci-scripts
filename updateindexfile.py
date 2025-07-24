@@ -15,21 +15,19 @@ bucket_name = "eups-prod"
 
 
 def update_helper(loc):
-    print(loc)
     target = f"gs://{bucket_name}/{loc}"
+    print(target)
     # Using the gcloud cli tool was the most consistant way to get file names. SDK would give a mix of folders and files
     indexdata = subprocess.run(
         ["gcloud", "storage", "ls", target], capture_output=True, check=True, text=True
     )
     indexdata = indexdata.stdout.split()
     index = [i.split("/")[-1] for i in indexdata]
-    for i in indexdata:
-        index.append(i.split("/")[-1])
     with tempfile.NamedTemporaryFile("w", delete_on_close=False) as tmpfile:
         json.dump(index, tmpfile)
         print("Fetched files")
         copy = subprocess.run(
-            ["gcloud", "storage", "cp", tmpfile.name, target + "/index.json"],
+            ["gcloud", "storage", "cp", tmpfile.name, target + "index.json"],
             capture_output=True,
             check=True,
             text=True,
