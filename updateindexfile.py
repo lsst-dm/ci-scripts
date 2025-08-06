@@ -13,9 +13,14 @@ def update_helper(loc: str):
     target = f"gs://{bucket_name}/{loc}"
     print(target)
     # Using the gcloud cli tool was the most consistant way to get file names. SDK would give a mix of folders and files
-    indexdata = subprocess.run(
-        ["gcloud", "storage", "ls", target], capture_output=True, check=True, text=True
-    )
+    indexdata = None
+    try:
+        indexdata = subprocess.run(
+            ["gcloud", "storage", "ls", target], capture_output=True, check=True, text=True
+        )
+    except subprocess.CalledProcessError:
+        print(f"{target} does not exist, skipping")
+        return
     indexdata = indexdata.stdout.split()
     index = [i.split("/")[-1] for i in indexdata]
     with tempfile.NamedTemporaryFile("w", delete_on_close=False) as tmpfile:
