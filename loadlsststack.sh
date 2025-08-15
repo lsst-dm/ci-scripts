@@ -32,3 +32,12 @@ tar -xvzf "${TARGET}" || fail "Extraction failed"
 [[ -d "$LSSTSW_DIR/stack" ]] || fail "Can't find stack dir"
 rm "${TARGET}" || fail "Couldn't delete artifact"
 cd "${LSSTSW_DIR}" || fail "Can't find ${LSSTSW_DIR}"
+ 
+if [ "$ARCH_VER" = "x86_64" ]; then
+  ARCH="linux-9-x86"
+elif [ "$ARCH_VER" = "aarch64" ]; then
+  ARCH="linux-9-aarch64"
+fi
+# clean up scripts to point to the right dir in jenkins
+# Would like to find a dynamic way of doing this 
+find . -type f -exec sed -i "s/sqre\/infra\/cache_lsstsw/stack-os-matrix\/$ARCH/g" {} +
