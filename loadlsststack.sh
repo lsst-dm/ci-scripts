@@ -19,14 +19,14 @@ DATE_TAG=$1
 
 ARCH_VER=$(uname -m)
 
-TARGET="${DATE_TAG}_${ARCH_VER}_lsstsw.tar.gz" 
+TARGET="${DATE_TAG}_${ARCH_VER}_lsstsw.tar.zst" 
 mkdir -p "${TMP_FOLDER}"
 
 gcloud storage ls "${GCP_BUCKET}/${TARGET}" || fail "failed file or tag doesn't exist"
 
 cd "${ROOT_DIR}" || fail "Can't find ${ROOT_DIR}"
 gcloud storage cp "${GCP_BUCKET}/${TARGET}" "${TARGET}" || fail "Download failed"
-tar -xvzf "${TARGET}" || fail "Extraction failed"
+tar -I "zstd -T0" -xf "${TARGET}" || fail "Extraction failed"
 [[ -d "$LSSTSW_DIR" ]] || fail "Can't find lsstsw dir"
 [[ -d "$LSSTSW_DIR/miniconda" ]] || fail "Can't find miniconda dir"
 [[ -d "$LSSTSW_DIR/stack" ]] || fail "Can't find stack dir"
