@@ -24,7 +24,7 @@ DATE_TAG=$1
 mkdir -p "$TMP_FOLDER"
 ARCH_VER=$(uname -m)
 
-TARGET="${TMP_FOLDER}/${DATE_TAG}_${ARCH_VER}_lsstsw.tar.gz" 
+TARGET="${TMP_FOLDER}/${DATE_TAG}_${ARCH_VER}_lsstsw.tar.zst"
 
 cd "$ROOT_DIR" || fail "Can't find ${ROOT_DIR}"
 
@@ -33,7 +33,7 @@ cd "$ROOT_DIR" || fail "Can't find ${ROOT_DIR}"
 [[ -d "$LSSTSW_DIR/stack" ]] || fail "Can't find stack dir"
 [[ -d "$LSSTSW_DIR/build" ]] || fail "Can't find build dir"
 
-tar -cvzf "${TARGET}" lsstsw
+tar --zstd -cf "${TARGET}" lsstsw
 
 gcloud storage cp "${TARGET}" "${GCP_BUCKET}"
 
