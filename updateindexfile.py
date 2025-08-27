@@ -25,6 +25,7 @@ def update_helper(loc: str):
     index = [i.split("/")[-1] for i in indexdata]
     with tempfile.NamedTemporaryFile("w", delete_on_close=False) as tmpfile:
         json.dump(index, tmpfile)
+        tmpfile.close()
         print("Fetched files")
         copy = subprocess.run(
             ["gcloud", "storage", "cp", tmpfile.name, target + "index.json"],
