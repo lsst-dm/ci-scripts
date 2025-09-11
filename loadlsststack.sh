@@ -24,6 +24,7 @@ mkdir -p "${TMP_FOLDER}"
 
 gcloud storage ls "${GCP_BUCKET}/${TARGET}" || fail "failed file or tag doesn't exist"
 
+echo "we are on Ari's branch"
 cd "${ROOT_DIR}" || fail "Can't find ${ROOT_DIR}"
 gcloud storage cp "${GCP_BUCKET}/${TARGET}" "${TARGET}" || fail "Download failed"
 tar -I "zstd -T0" -xf "${TARGET}" --checkpoint=500000 --checkpoint-action=echo="# checkpoint %u" || fail "Extraction failed"
