@@ -48,6 +48,15 @@ def get_list_of_folders()-> list[str]:
             conda_folder.append(j.split(f"gs://{bucket_name}/")[1])
     return conda_folder
 
+def check_for_index_file(src: str) -> int:
+    src = "https://eups.lsst.cloud/" + src
+    print("Checking ",src)
+    r = subprocess.run(["curl", "-s", "-o", '/dev/null', '-w', "200", src], capture_output=True, text=True)
+    print(r.stdout)
+    if r.stdout != "200":
+        raise ValueError
+    return int(r.stdout)
+
 platforms = ["stack/src/"]
 platforms.extend(get_list_of_folders())
 
@@ -58,8 +67,10 @@ for p in platforms:
         for f in srcfolders:
             prefix = p + f
             update_helper(prefix)
+            check_for_index_file(prefix)
     else:
         update_helper(p)
         for f in folders:
             prefix = p + f
             update_helper(prefix)
+            check_for_index_file(prefix)
