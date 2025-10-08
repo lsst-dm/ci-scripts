@@ -3,8 +3,6 @@ import subprocess
 import tempfile
 import os
 
-TMPFILE = "/tmp/index.json"
-
 miniver = os.getenv("MINIVER")
 splenv = os.getenv("SPLENV_REF")
 
@@ -68,22 +66,26 @@ def get_list_of_folders() -> list[str]:
     return conda_folder
 
 
-platforms = ["stack/src/"]
-# Gets all of the folders
-platforms.extend(get_list_of_folders())
+def main():
+    platforms = ["stack/src/"]
+    # Gets all of the folders
+    platforms.extend(get_list_of_folders())
 
-# If miniver and splenv are set, filter out folders that are not included
-platforms = [p for p in platforms if filter_folders() in p or "src/" in p]
-for p in platforms:
-    if "src" in p:
-        # Src folder contains extra folders
-        srcfolders = folders + ["products/", "tags/"]
-        for f in srcfolders:
-            prefix = p + f
-            update_helper(prefix)
-    else:
-        update_helper(p)
-        print(p)
-        for f in folders:
-            prefix = p + f
-            update_helper(prefix)
+    # If miniver and splenv are set, filter out folders that are not included
+    platforms = [p for p in platforms if filter_folders() in p or "src/" in p]
+    for p in platforms:
+        if "src" in p:
+            # Src folder contains extra folders
+            srcfolders = folders + ["products/", "tags/"]
+            for f in srcfolders:
+                prefix = p + f
+                update_helper(prefix)
+        else:
+            update_helper(p)
+            for f in folders:
+                prefix = p + f
+                update_helper(prefix)
+
+
+if __name__ == "__main__":
+    main()
