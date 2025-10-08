@@ -1,76 +1,108 @@
 import json
 import subprocess
 import tempfile
+import os
 
-TMPFILE = "/tmp/index.json"
-# We should look for a way to get the names automatically. GCP sdk was not able to help with this.
+miniver = os.getenv("MINIVER")
+splenv = os.getenv("SPLENV_REF")
+
 folders = ["manifests/", "env/", "tables/"]
-bucket_name = "eups-prod"
+BUCKET_NAME = "eups-prod"
+GCS_PREFIX = f"gs://{BUCKET_NAME}"
+INDEX_FILE = "index.json"
 
-root_folders = ["stack/redhat/el7/conda-system","stack/redhat/el8-arm/conda-system","stack/osx/14-arm/conda-system"]
+
+root_folders = [
+    "stack/redhat/el7/conda-system",
+    "stack/redhat/el8-arm/conda-system",
+    "stack/osx/14-arm/conda-system",
+]
+
+
+# If we have the MINIVER and SPLENV_REF defined, then we can return
+# a string to filter by
+def filter_folders() -> str:
+    if miniver and splenv:
+        return f"miniconda3-{miniver}-{splenv}"
+    return ""
+
+
+def get_gcs_object_uris(target: str) -> list[str]:
+    indexdata = subprocess.run(
+        ["gcloud", "storage", "ls", target], capture_output=True, check=True, text=True
+    )
+    return indexdata.stdout.split()
+
+
+def copy_files(file: str, target: str):
+    copy = subprocess.run(
+        ["gcloud", "storage", "cp", file, target + INDEX_FILE],
+        capture_output=True,
+        check=True,
+        text=True,
+    )
+    if copy.returncode == 0:
+        print(f"updated {INDEX_FILE}")
+
 
 def update_helper(loc: str):
-    target = f"gs://{bucket_name}/{loc}"
+    target = f"{GCS_PREFIX}/{loc}"
     print(target)
-    # Using the gcloud cli tool was the most consistant way to get file names. SDK would give a mix of folders and files
-    indexdata = None
+    # Using the gcloud cli tool was the most consistant way to get file names.
+    # SDK would give a mix of folders and files
+    indexdata = []
     try:
-        indexdata = subprocess.run(
-            ["gcloud", "storage", "ls", target], capture_output=True, check=True, text=True
-        )
+        indexdata = get_gcs_object_uris(target)
     except subprocess.CalledProcessError:
         print(f"{target} does not exist, skipping")
         return
-    indexdata = indexdata.stdout.split()
-    index = [i.split("/")[-1] for i in indexdata]
-    with tempfile.NamedTemporaryFile("w", delete_on_close=False) as tmpfile:
-        json.dump(index, tmpfile)
-        tmpfile.close()
+    # makes a list of all the filenames in the target. It filters out folders
+    # because folders will be empty strings
+    # index = [file for i in indexdata for file in [i.split("/")[-1]] if file]
+    index = [i.split("/")[-1] for i in indexdata if i]
+    with tempfile.NamedTemporaryFile("w", delete_on_close=False) as f:
+        json.dump(index, f)
+        f.close()
         print("Fetched files")
-        copy = subprocess.run(
-            ["gcloud", "storage", "cp", tmpfile.name, target + "index.json"],
-            capture_output=True,
-            check=True,
-            text=True,
-        )
-        if copy.returncode == 0:
-            print("updated index.json")
+        copy_files(f.name, target)
+        os.remove(f.name)
 
-def get_list_of_folders()-> list[str]:
+
+def get_list_of_folders() -> list[str]:
     conda_folder = []
     for folder in root_folders:
-        target = f"gs://{bucket_name}/{folder}"
-        indexdata = subprocess.run(
-            ["gcloud", "storage", "ls", target], capture_output=True, check=True, text=True
-        )
-        indexdata = indexdata.stdout.split()
+        target = f"{GCS_PREFIX}/{folder}"
+        indexdata = None
+        try:
+            indexdata = get_gcs_object_uris(target)
+        except subprocess.CalledProcessError:
+            print(f"{target} does not exist, skipping")
+            continue
         for j in indexdata:
-            conda_folder.append(j.split(f"gs://{bucket_name}/")[1])
+            conda_folder.append(j.removeprefix(f"{GCS_PREFIX}/"))
     return conda_folder
 
-def check_for_index_file(src: str) -> int:
-    src = "https://eups.lsst.cloud/" + src
-    print("Checking ",src)
-    r = subprocess.run(["curl", "-s", "-o", '/dev/null', '-w', "200", src], capture_output=True, text=True)
-    print(r.stdout)
-    if r.stdout != "200":
-        raise ValueError
-    return int(r.stdout)
 
-platforms = ["stack/src/"]
-platforms.extend(get_list_of_folders())
+def main():
+    platforms = ["stack/src/"]
+    # Gets all of the folders
+    platforms.extend(get_list_of_folders())
 
-for p in platforms:
-    if "src" in p:
-        # Src folder contains extra folders
-        srcfolders = folders + ["products/", "tags/"]
-        for f in srcfolders:
-            prefix = p + f
-            update_helper(prefix)
-            check_for_index_file(prefix)
-    else:
-        update_helper(p)
-        for f in folders:
-            prefix = p + f
-            update_helper(prefix)
-            check_for_index_file(prefix)
+    # If miniver and splenv are set, filter out folders that are not included
+    platforms = [p for p in platforms if filter_folders() in p or "src/" in p]
+    for p in platforms:
+        if "src" in p:
+            # Src folder contains extra folders
+            srcfolders = folders + ["products/", "tags/"]
+            for f in srcfolders:
+                prefix = p + f
+                update_helper(prefix)
+        else:
+            update_helper(p)
+            for f in folders:
+                prefix = p + f
+                update_helper(prefix)
+
+
+if __name__ == "__main__":
+    main()
