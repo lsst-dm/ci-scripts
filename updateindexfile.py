@@ -7,7 +7,10 @@ miniver = os.getenv("MINIVER")
 splenv = os.getenv("SPLENV_REF")
 
 folders = ["manifests/", "env/", "tables/"]
-bucket_name = "eups-prod"
+BUCKET_NAME = "eups-prod"
+GCS_PREFIX = f"gs://{BUCKET_NAME}"
+INDEX_FILE = "index.json"
+
 
 root_folders = [
     "stack/redhat/el7/conda-system",
@@ -24,45 +27,59 @@ def filter_folders() -> str:
     return ""
 
 
+def get_gcs_object_uris(target: str) -> list[str]:
+    indexdata = subprocess.run(
+        ["gcloud", "storage", "ls", target], capture_output=True, check=True, text=True
+    )
+    return indexdata.stdout.split()
+
+
+def copy_files(file: str, target: str):
+    copy = subprocess.run(
+        ["gcloud", "storage", "cp", file, target + INDEX_FILE],
+        capture_output=True,
+        check=True,
+        text=True,
+    )
+    if copy.returncode == 0:
+        print(f"updated {INDEX_FILE}")
+
+
 def update_helper(loc: str):
-    target = f"gs://{bucket_name}/{loc}"
+    target = f"{GCS_PREFIX}/{loc}"
     print(target)
     # Using the gcloud cli tool was the most consistant way to get file names.
     # SDK would give a mix of folders and files
-    indexdata = None
+    indexdata = []
     try:
-        indexdata = subprocess.run(
-            ["gcloud", "storage", "ls", target], capture_output=True, check=True, text=True
-        )
+        indexdata = get_gcs_object_uris(target)
     except subprocess.CalledProcessError:
         print(f"{target} does not exist, skipping")
         return
-    indexdata = indexdata.stdout.split()
-    index = [i.split("/")[-1] for i in indexdata]
-    with tempfile.NamedTemporaryFile("w", delete_on_close=False) as tmpfile:
-        json.dump(index, tmpfile)
-        tmpfile.close()
+    # makes a list of all the filenames in the target. It filters out folders
+    # because folders will be empty strings
+    # index = [file for i in indexdata for file in [i.split("/")[-1]] if file]
+    index = [i.split("/")[-1] for i in indexdata if i]
+    with tempfile.NamedTemporaryFile("w", delete_on_close=False) as f:
+        json.dump(index, f)
+        f.close()
         print("Fetched files")
-        copy = subprocess.run(
-            ["gcloud", "storage", "cp", tmpfile.name, target + "index.json"],
-            capture_output=True,
-            check=True,
-            text=True,
-        )
-        if copy.returncode == 0:
-            print("updated index.json")
+        copy_files(f.name, target)
+        os.remove(f.name)
 
 
 def get_list_of_folders() -> list[str]:
     conda_folder = []
     for folder in root_folders:
-        target = f"gs://{bucket_name}/{folder}"
-        indexdata = subprocess.run(
-            ["gcloud", "storage", "ls", target], capture_output=True, check=True, text=True
-        )
-        indexdata = indexdata.stdout.split()
+        target = f"{GCS_PREFIX}/{folder}"
+        indexdata = None
+        try:
+            indexdata = get_gcs_object_uris(target)
+        except subprocess.CalledProcessError:
+            print(f"{target} does not exist, skipping")
+            continue
         for j in indexdata:
-            conda_folder.append(j.split(f"gs://{bucket_name}/")[1])
+            conda_folder.append(j.removeprefix(f"{GCS_PREFIX}/"))
     return conda_folder
 
 
