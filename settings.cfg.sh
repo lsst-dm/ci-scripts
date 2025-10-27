@@ -8,6 +8,9 @@ LSSTSW_BUILD_DIR=${LSSTSW_BUILD_DIR:-${LSSTSW}/build}
 # lsstswBuild.sh
 # options passed to ./create_xlinkdocs.sh as cli options
 DOC_PUSH_PATH=${DOC_PUSH_PATH:-"$HOME/public_html/doxygen"}
+# lsstcam
+LSSTCAM_BUCKET=${LSSTCAM_BUCKET:-'rubin-ci-lsst/testdata_ci_lsstcam_m49'}
+LSSTCAM_TESTDATA_DIR=${LSSTCAM_TESTDATA_DIR:-'/tmp/LSSTCAMData'}
 
 # create_xlinkdocs.sh
 DOC_REPO_URL=${DOC_REPO_URL:-"https://github.com/lsst/lsstDoxygen.git"}

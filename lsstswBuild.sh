@@ -19,6 +19,7 @@ GIT_REFS=
 PRODUCTS=
 NO_BINARY_FETCH=false
 NO_FETCH=false
+LSSTCAM_ONLY=false
 COLORIZE=false
 DEBUG=${DEBUG:-true}
 
@@ -90,7 +91,7 @@ run() {
 }
 
 # shellcheck disable=SC2054 disable=SC2034
-options=(getopt --long refs:,products:,docs,no-fetch,no-binary-fetch,print-fail,color,prepare-only -- "$@")
+options=(getopt --long refs:,products:,docs,no-fetch,no-binary-fetch,print-fail,color,prepare-only,lsstcam-only -- "$@")
 while true
 do
   case "$1" in
@@ -101,6 +102,7 @@ do
     --no-binary-fetch)  NO_BINARY_FETCH=true    ; shift 1 ;;
     --color)            COLORIZE=true           ; shift 1 ;;
     --prepare-only)     PREP_ONLY=true          ; shift 1 ;;
+    --lsstcam-only)     LSSTCAM_ONLY=true          ; shift 1 ;;
     --) shift; break;;
     *) [[ "$*" != "" ]] && fail "Unknown option: $1"
        break;;
@@ -128,6 +130,8 @@ settings=(
   LSSTSW_BUILD_DIR
   NO_FETCH
   NO_BINARY_FETCH
+  LSSTCAM_BUCKET
+  LSSTCAM_TESTDATA_DIR
   PRODUCTS
 )
 
@@ -178,6 +182,7 @@ ARGS=()
 [[ $NO_FETCH == true ]] &&  ARGS+=('-n')
 [[ $PREP_ONLY == true ]] && ARGS+=('-p')
 [[ $NO_BINARY_FETCH == true ]] && ARGS+=('-B')
+[[ $LSSTCAM_ONLY == true ]] && ARGS+=('-L')
 
 [[ ${#REF_LIST[@]} -ne 0 ]] &&
   for r in "${REF_LIST[@]}"; do

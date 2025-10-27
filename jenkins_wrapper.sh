@@ -44,6 +44,7 @@ LSST_NO_FETCH=${LSST_NO_FETCH:-false}
 LSST_NO_BINARY_FETCH=${LSST_NO_BINARY_FETCH:-true}
 LSST_PREP_ONLY=${LSST_PREP_ONLY:-false}
 LSST_REFS=${LSST_REFS:-}
+LSSTCAM_ONLY=${LSSTCAM_ONLY:-}
 
 fatal_vars() {
   local verboten=(
@@ -71,6 +72,10 @@ fatal_vars
 ARGS=()
 ARGS+=('--color')
 
+if [[ $LSSTCAM_ONLY ]]; then
+  ARGS+=('--lsstcam-only')
+  LSST_PRODUCTS="ci_lsstcam"
+fi
 [[ -n $LSST_REFS ]] &&     ARGS+=('--refs' "$LSST_REFS")
 [[ -n $LSST_PRODUCTS ]] && ARGS+=('--products' "$LSST_PRODUCTS")
 
