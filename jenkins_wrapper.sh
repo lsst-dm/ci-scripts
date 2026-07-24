@@ -92,6 +92,16 @@ if [[ $LSST_DEPLOY_MODE == bleed ]]; then
   OPTS+=('-b')
 fi
 
+# Force the conda solver to target glibc 2.17 so the rebuild's conda env
+# (captured in stack/src/env/<tag>.env via `conda list --explicit`) resolves
+# packages that run on RHEL7-era hosts such as USDF cvmfs. Only affects the
+# env create/install done by ./bin/deploy; unset before the build runs so it
+# never influences runtime. Linux/x86_64 only -- irrelevant on macOS, and we
+# don't override glibc on aarch64.
+if [[ $(uname -s) == Linux && $(uname -m) == x86_64 ]]; then
+  export CONDA_OVERRIDE_GLIBC=2.17
+fi
+
 if [[ -z "$RUBINENV_ORG_FORK" ]]; then
   # The LSST_SPLENV_REF can refer to a rubin-env version
   #  or to an old scipipe_conda_env SHA1
@@ -115,6 +125,9 @@ else
   ./bin/set_prereleased_env "$RUBINENV_ORG_FORK" "$RUBINENV_BRANCH"
   LSST_CONDA_ENV_NAME="$(cat rubinenv-feedstock/env.name)"
 fi
+
+# glibc override applies only to the env-create step above, never at build/runtime
+unset CONDA_OVERRIDE_GLIBC
 
 export LSST_CONDA_ENV_NAME
 
