@@ -1,9 +1,12 @@
 import json
 import os
 import subprocess
+import sys
 import tempfile
 from collections import defaultdict
-from concurrent.futures import ThreadPoolExecutor
+from concurrent.futures import ThreadPoolExecutor, as_completed
+from dataclasses import dataclass, field
+from enum import StrEnum
 
 DRY_RUN = os.getenv("DRY_RUN", "").lower() in ("1", "true", "yes")
 
@@ -28,14 +31,31 @@ ROOT_FOLDERS = [
 MAX_WORKERS = 16
 
 
+class IndexStatus(StrEnum):
+    MISSING = "MISSING"  # no index.json in prod yet
+    DIFFERS = "DIFFERS"  # contents or order differs from prod
+    UNREADABLE = "UNREADABLE"  # existing index could not be read
+
+
+@dataclass
+class IndexDiff:
+    dest: str
+    status: IndexStatus
+    count: int = 0
+    reordered: bool = False
+    added: list[str] = field(default_factory=list)
+    removed: list[str] = field(default_factory=list)
+
+
 def filter_folders() -> str:
     if MINIVER and SPLENV_REF:
         return f"miniconda3-{MINIVER}-{SPLENV_REF}"
     return ""
 
 
-def list_recursive(prefix: str) -> list[str]:
+def list_recursive(prefix: str) -> list[str] | None:
     """Return every object path under prefix (recursive), relative to the bucket.
+    Returns [] if the prefix matched nothing or None if the listing command itself failed.
 
     Uses the ``**`` wildcard so gcloud returns a flat list of object URLs
     (no directory placeholders, no per-directory headers), which is cheap to
@@ -49,11 +69,15 @@ def list_recursive(prefix: str) -> list[str]:
             check=True,
             text=True,
         )
-    except subprocess.CalledProcessError:
-        print(f"{target} matched no objects, skipping")
-        return []
+    except subprocess.CalledProcessError as e:
+        stderr = e.stderr or ""
+        # error messages taken from gcloud storage ls docs. Could change in the future
+        if "matched no objects" in stderr:
+            return []
+        print(f"ERROR: listing {target} failed: {stderr.strip()}")
+        return None
     strip = f"{GCS_PREFIX}/"
-    return [u[len(strip):] for u in result.stdout.splitlines() if u.startswith(strip)]
+    return [u[len(strip) :] for u in result.stdout.splitlines() if u.startswith(strip)]
 
 
 def group_by_parent(objects: list[str]) -> dict[str, list[str]]:
@@ -61,7 +85,7 @@ def group_by_parent(objects: list[str]) -> dict[str, list[str]]:
     by_parent: dict[str, list[str]] = defaultdict(list)
     for obj in objects:
         cut = obj.rfind("/")
-        parent, name = obj[: cut + 1], obj[cut + 1:]
+        parent, name = obj[: cut + 1], obj[cut + 1 :]
         if name and name != INDEX_FILE:
             by_parent[parent].append(name)
     return by_parent
@@ -84,7 +108,7 @@ def platform_folders(root: str, objects: list[str]) -> set[str]:
     for obj in objects:
         if not obj.startswith(base):
             continue
-        seg = obj[len(base):].split("/", 1)[0]
+        seg = obj[len(base) :].split("/", 1)[0]
         if seg:
             folders.add(f"{base}{seg}/")
     return folders
@@ -94,8 +118,8 @@ def upload_index(target: str, names: list[str]) -> None:
     """Write the file list as index.json into the target folder."""
     dest = f"{GCS_PREFIX}/{target}{INDEX_FILE}"
     with tempfile.NamedTemporaryFile("w", suffix=".json", delete=False) as f:
-        json.dump(names, f)
         tmp = f.name
+        json.dump(names, f)
     try:
         subprocess.run(
             ["gcloud", "storage", "cp", tmp, dest],
@@ -104,13 +128,14 @@ def upload_index(target: str, names: list[str]) -> None:
             text=True,
         )
         print(f"updated {dest}")
+    # Adding more detail to when an upload fails
+    except subprocess.CalledProcessError as e:
+        raise RuntimeError(f"upload to {dest} failed: {(e.stderr or '').strip()}") from e
     finally:
         os.remove(tmp)
 
 
-def target_prefixes(
-    root_objects: dict[str, list[str]], existing: set[str]
-) -> list[str]:
+def target_prefixes(root_objects: dict[str, list[str]], existing: set[str]) -> list[str]:
     """Build the ordered, de-duplicated list of folders needing an index."""
     sub = filter_folders()
     targets = [f"stack/src/{f}" for f in SRC_SUBFOLDERS]
@@ -123,8 +148,9 @@ def target_prefixes(
     targets = [t for t in targets if t in existing]
     return list(dict.fromkeys(targets))
 
+
 def fetch_current_index(target: str) -> list[str] | None:
-    """Download the existing index.json for a target, or None if absent."""
+    """Download the existing index.json for a target, or None if absent. Raise RuntimeError if the read itself failed"""
     src = f"{GCS_PREFIX}/{target}{INDEX_FILE}"
     try:
         result = subprocess.run(
@@ -133,52 +159,61 @@ def fetch_current_index(target: str) -> list[str] | None:
             check=True,
             text=True,
         )
-    except subprocess.CalledProcessError:
-        return None
+    except subprocess.CalledProcessError as e:
+        stderr = e.stderr or ""
+        if "does not exist" in stderr or "matched no objects" in stderr:
+            return None
+        raise RuntimeError(f"could not read {src}: {stderr.strip()}") from e
     try:
         return json.loads(result.stdout)
     except json.JSONDecodeError:
         print(f"WARNING: {src} is not valid JSON")
         return None
 
-def compare_index(target: str, names: list[str]) -> dict | None:
+
+def compare_index(target: str, names: list[str]) -> IndexDiff | None:
     """Compare the generated index against the one currently in prod. Used for testing"""
     dest = f"{GCS_PREFIX}/{target}{INDEX_FILE}"
-    current = fetch_current_index(target)
+    try:
+        current = fetch_current_index(target)
+    except RuntimeError as e:
+        print(f"WARNING: {e}")
+        return IndexDiff(dest=dest, status=IndexStatus.UNREADABLE)
 
     if current is None:
-        return {
-            "dest": dest,
-            "status": "MISSING",
-            "count": len(names),
-        }
+        return IndexDiff(dest=dest, status=IndexStatus.MISSING, count=len(names))
 
-    names =normalize_index(names)
+    names = normalize_index(names)
     current = normalize_index(current)
     if current == names:
         return None  # up-to-date, nothing to report
 
     cur_set, new_set = set(current), set(names)
-    return {
-        "dest": dest,
-        "status": "DIFFERS",
-        "reordered": cur_set == new_set,  # same contents, different order
-        "added": sorted(new_set - cur_set),
-        "removed": sorted(cur_set - new_set),
-    }
+    return IndexDiff(
+        dest=dest,
+        status=IndexStatus.DIFFERS,
+        reordered=cur_set == new_set,  # same contents, different order
+        added=sorted(new_set - cur_set),
+        removed=sorted(cur_set - new_set),
+    )
+
 
 def normalize_index(names: list[str]) -> list[str]:
     """Drop blank/whitespace-only entries and index.json for comparison."""
-    return [
-        n for n in names
-        if n and n.strip() and n.strip() != INDEX_FILE
-    ]
+    return [n for n in names if n and n.strip() and n.strip() != INDEX_FILE]
 
-def main():
+
+def main() -> int:
     # One recursive listing for src plus one per conda root, run concurrently.
     listing_prefixes = ["stack/src"] + ROOT_FOLDERS
     with ThreadPoolExecutor(max_workers=len(listing_prefixes)) as pool:
         listings = list(pool.map(list_recursive, listing_prefixes))
+    if any(objs is None for objs in listings):
+        print("Error: one or more listings failed; aborting and not uploading")
+        return 1
+
+    # Narrow the type: after the guard above, no entry is None.
+    listings = [objs for objs in listings if objs is not None]
 
     src_objects = listings[0]
     root_objects = dict(zip(ROOT_FOLDERS, listings[1:]))
@@ -196,20 +231,22 @@ def main():
         print("[DRY-RUN] no objects will be uploaded")
 
     with ThreadPoolExecutor(max_workers=MAX_WORKERS) as pool:
-        futures = [
-            pool.submit(action, t, sorted(by_parent.get(t, [])))
-            for t in targets
-        ]
+        futures = {pool.submit(action, t, sorted(by_parent.get(t, []))): t for t in targets}
         results = []
-        for future in futures:
+        failures = 0
+        for future in as_completed(futures):
+            target = futures[future]
             try:
                 results.append(future.result())
             except Exception as e:
-                print(f"Error: task failed: {e}")
-                results.append(None)
+                print(f"Error: {target} failed: {e}")
+                failures += 1
 
     if not DRY_RUN:
-        return
+        if failures:
+            print(f"ERROR: {failures} of {len(targets)} uploads failed")
+            return 1
+        return 0
     # Recap: only folders whose index would change.
     diffs = [r for r in results if r]
     print("\n" + "=" * 60)
@@ -217,19 +254,25 @@ def main():
     print("=" * 60)
 
     for r in diffs:
-        if r["status"] == "MISSING":
-            print(f"\n{r['dest']}")
-            print(f"    MISSING in prod, would create with {r['count']} entries")
+        if r.status is IndexStatus.MISSING:
+            print(f"\n{r.dest}")
+            print(f"    MISSING in prod, would create with {r.count} entries")
+            continue
+        if r.status is IndexStatus.UNREADABLE:
+            print(f"\n{r.dest} UNREADABLE (could not compare)")
             continue
 
-        print(f"\n{r['dest']}  DIFFERS")
-        if r["reordered"]:
+        print(f"\n{r.dest}  DIFFERS")
+        if r.reordered:
             print("    (same contents, different order)")
-        for name in r["added"]:
+        for name in r.added:
             print(f"    + {name}")
-        for name in r["removed"]:
+        for name in r.removed:
             print(f"    - {name}")
+    if failures:
+        print(f"WARNING: {failures} comparisons errored")
+    return 1 if failures else 0
 
 
 if __name__ == "__main__":
-    main()
+    sys.exit(main())
