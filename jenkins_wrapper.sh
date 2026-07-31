@@ -99,7 +99,7 @@ fi
 # env create/install done by ./bin/deploy; unset before the build runs so it
 # never influences runtime. Linux/x86_64 only -- irrelevant on macOS, and we
 # don't override glibc on aarch64. We also need to pass a flag from Jenkins to
-# avoid false possitives.
+# avoid false positives.
 if [[ $LSST_GLIBC_FLAG = "true" && $(uname -s) == Linux && $(uname -m) == x86_64 ]] && \
   [[ $(printf '%s\n' "13.0.0" "$LSST_SPLENV_REF" | sort -V | tail -n1) == "$LSST_SPLENV_REF" ]]; then
   export CONDA_OVERRIDE_GLIBC=2.17
