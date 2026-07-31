@@ -43,6 +43,7 @@ LSST_DEPLOY_MODE=${LSST_DEPLOY_MODE:-}
 LSST_NO_FETCH=${LSST_NO_FETCH:-false}
 LSST_NO_BINARY_FETCH=${LSST_NO_BINARY_FETCH:-true}
 LSST_PREP_ONLY=${LSST_PREP_ONLY:-false}
+LSST_GLIBC_FLAG=${LSST_GLIBC_FLAG:-false}
 LSST_REFS=${LSST_REFS:-}
 
 fatal_vars() {
@@ -97,8 +98,9 @@ fi
 # packages that run on RHEL7-era hosts such as USDF cvmfs. Only affects the
 # env create/install done by ./bin/deploy; unset before the build runs so it
 # never influences runtime. Linux/x86_64 only -- irrelevant on macOS, and we
-# don't override glibc on aarch64.
-if [[ $(uname -s) == Linux && $(uname -m) == x86_64 ]] && \
+# don't override glibc on aarch64. We also need to pass a flag from Jenkins to
+# avoid false possitives.
+if [[ $LSST_GLIBC_FLAG = "true" && $(uname -s) == Linux && $(uname -m) == x86_64 ]] && \
   [[ $(printf '%s\n' "13.0.0" "$LSST_SPLENV_REF" | sort -V | tail -n1) == "$LSST_SPLENV_REF" ]]; then
   export CONDA_OVERRIDE_GLIBC=2.17
 fi
