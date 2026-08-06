@@ -44,6 +44,7 @@ LSST_NO_FETCH=${LSST_NO_FETCH:-false}
 LSST_NO_BINARY_FETCH=${LSST_NO_BINARY_FETCH:-true}
 LSST_PREP_ONLY=${LSST_PREP_ONLY:-false}
 LSST_GLIBC_FLAG=${LSST_GLIBC_FLAG:-false}
+LSST_ADD_RSP=${LSST_ADD_RSP:-false}
 LSST_REFS=${LSST_REFS:-}
 
 fatal_vars() {
@@ -92,6 +93,9 @@ OPTS=()
 if [[ $LSST_DEPLOY_MODE == bleed ]]; then
   OPTS+=('-b')
 fi
+if [[ $LSST_ADD_RSP == true ]]; then
+  OPTS+=('-R')
+fi
 
 # Force the conda solver to target glibc 2.17 so the rebuild's conda env
 # (captured in stack/src/env/<tag>.env via `conda list --explicit`) resolves
@@ -121,7 +125,8 @@ if [[ -z "$RUBINENV_ORG_FORK" ]]; then
     echo "Unrecognized environment reference: $LSST_SPLENV_REF"
     exit 1
   fi
-  LSST_CONDA_ENV_NAME="lsst-scipipe-${LSST_SPLENV_REF}"
+  suffix=$([ "$LSST_ADD_RSP" = true ] && echo "-rsp" || echo "")
+  LSST_CONDA_ENV_NAME="lsst-scipipe-${LSST_SPLENV_REF}${suffix}"
 else
   # build and deploy a rubinenv environment from fork/branch
   ./bin/deploy -v "$LSST_SPLENV_REF" "${OPTS[@]}"
