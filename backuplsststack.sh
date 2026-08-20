@@ -33,7 +33,10 @@ cd "$ROOT_DIR" || fail "Can't find ${ROOT_DIR}"
 [[ -d "$LSSTSW_DIR/stack" ]] || fail "Can't find stack dir"
 [[ -d "$LSSTSW_DIR/build" ]] || fail "Can't find build dir"
 
-tar --zstd -cf "${TARGET}" lsstsw
+# lsstDoxygen is not an EUPS product -- create_xlinkdocs.sh clones the doc repo
+# and generates HTML under lsstsw/build/, which bloats the tarball and shows up
+# as a package to consumers that enumerate lsstsw/build/*.
+tar --zstd -cf "${TARGET}" --exclude=lsstsw/build/lsstDoxygen lsstsw
 
 gcloud storage cp "${TARGET}" "${GCP_BUCKET}"
 
