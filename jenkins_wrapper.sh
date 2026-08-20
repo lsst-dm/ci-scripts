@@ -120,7 +120,7 @@ if [[ -z "$RUBINENV_ORG_FORK" ]]; then
     #  pre instroduction of rubin-env
     ./bin/deploy -r "$LSST_SPLENV_REF" "${OPTS[@]}"
   elif [[ $LSST_SPLENV_REF == [dsvw]* ]]; then
-    ./bin/deploy -x "$LSST_SPLENV_REF" "${OPTS[*]}"
+    ./bin/deploy -x "$LSST_SPLENV_REF" "${OPTS[@]}"
   else
     echo "Unrecognized environment reference: $LSST_SPLENV_REF"
     exit 1
