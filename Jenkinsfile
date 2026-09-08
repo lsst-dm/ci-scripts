@@ -37,6 +37,17 @@ tests['shellcheck'] = {
   } // node
 }
 
+tests['pytest'] = {
+  node('docker') {
+    checkout scm
+
+    docker.image('python:3.11-slim').inside("-e HOME=${pwd()}") {
+      sh 'pip install --quiet pytest'
+      sh 'python -m pytest tests/ -v'
+    } // .inside
+  } // node
+}
+
 stage('tests') {
   parallel tests
 }
