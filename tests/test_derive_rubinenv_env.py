@@ -1,20 +1,10 @@
-"""Tests for derive_rubinenv_env.py.
-
-The regression these guard against: ${tag}.env used to be composed from two
-different conda solves -- package *names* from a throwaway plain rubin-env
-solve, versions/build strings substituted in from the rubin-env-rsp build env.
-A build variant chosen by the rsp solve can require packages the rubin-env
-solve never pulled in, so the result was not dependency closed. Concretely,
-rsp resolved libopencv to a qt6_* build while plain rubin-env resolved it to a
-headless_* build, so the published file shipped a Qt6-linked opencv with
-qt6-main filtered out, and consumers died at `import cv2` with
-"libQt6Widgets.so.6: cannot open shared object file".
-"""
+"""Tests for derive_rubinenv_env.py."""
 
 import json
 import os
 import subprocess
 import sys
+from urllib.parse import urlparse
 
 import pytest
 
@@ -35,10 +25,8 @@ RSP_ENV_HEADER = """\
 
 # (name, version, build, [depends]) in the order conda would list them.
 #
-# rubin-env reaches opencv -> libopencv, and only the qt6_* build of libopencv
-# depends on qt6-main. qt6-main is therefore reachable from rubin-env solely
-# through a build-variant choice made by the rsp solve -- the exact package the
-# old name-oracle derivation dropped.
+# Only the qt6_* build of libopencv depends on qt6-main, so qt6-main is reachable
+# from rubin-env solely through a build variant the rsp solve chose.
 PACKAGES = [
     ("python", "3.13.7", "hf636f53_0", ["__glibc >=2.17"]),
     ("libstdcxx", "14.3.0", "h8f9b012_0", []),
@@ -72,15 +60,17 @@ RUBIN_ENV_REACHABLE = {
 RSP_ONLY = {"notebook-shim", "jupyterlab", "rubin-env-rsp"}
 
 
-def url_line(name, version, build):
-    return f"{CHANNEL}/{name}-{version}-{build}.conda#{'a' * 32}"
+def url_line(name, version, build, channel=CHANNEL):
+    return f"{channel}/{name}-{version}-{build}.conda#{'a' * 32}"
 
 
-def write_env(path, packages, header=RSP_ENV_HEADER):
+def write_env(path, packages, header=RSP_ENV_HEADER, channels=None):
+    """Write a conda explicit file, optionally overriding a package's channel."""
+    channels = channels or {}
     with open(path, "w") as f:
         f.write(header)
         for name, version, build, _ in packages:
-            f.write(url_line(name, version, build) + "\n")
+            f.write(url_line(name, version, build, channels.get(name, CHANNEL)) + "\n")
 
 
 def write_conda_meta(path, packages):
@@ -130,25 +120,25 @@ def run(env, *extra):
     )
 
 
+def is_url(line):
+    return urlparse(line.strip()).scheme in ("http", "https", "file")
+
+
+def urls_of(path):
+    with open(path) as f:
+        return [ln.rstrip("\n") for ln in f if is_url(ln)]
+
+
 def names_of(path):
     names = []
-    with open(path) as f:
-        for line in f:
-            if not line.startswith("http"):
-                continue
-            base = line.strip().split("#")[0].rsplit("/", 1)[1]
-            base = base[: -len(".conda")]
-            names.append(base.rsplit("-", 2)[0])
+    for line in urls_of(path):
+        base = os.path.basename(urlparse(line).path).removesuffix(".conda")
+        names.append(base.rsplit("-", 2)[0])
     return names
 
 
 def test_qt6_variant_dependency_is_kept(env):
-    """qt6-main is reachable only via the rsp solve's qt6_* libopencv build.
-
-    This is the regression: the old derivation emitted the qt6_* libopencv line
-    but filtered qt6-main out, because qt6-main was not a member of the plain
-    rubin-env name set.
-    """
+    """qt6-main is reachable only via the rsp solve's qt6_* libopencv build."""
     result = run(env)
     assert result.returncode == 0, result.stderr
     names = names_of(env["out"])
@@ -196,18 +186,14 @@ def test_header_order_and_md5_are_preserved(env):
 
     assert out_lines[: len(RSP_ENV_HEADER.splitlines())] == RSP_ENV_HEADER.splitlines()
     # emitted URL lines are byte-identical to their rsp counterparts, in order
-    out_urls = [ln for ln in out_lines if ln.startswith("http")]
-    rsp_urls = [ln for ln in rsp_lines if ln.startswith("http")]
+    out_urls = [ln for ln in out_lines if is_url(ln)]
+    rsp_urls = [ln for ln in rsp_lines if is_url(ln)]
     assert out_urls == [ln for ln in rsp_urls if ln in set(out_urls)]
     assert all(ln.endswith("#" + "a" * 32) for ln in out_urls)
 
 
 def test_environment_name_header_is_passed_through(tmp_path):
-    """lsstsw prepends '#environment_name:' to ${BUILD}_rsp.env.
-
-    envconfig greps that line back out of the derived ${BUILD}.env to rebuild
-    against the same conda env, so it has to survive the derivation.
-    """
+    """envconfig greps '#environment_name:' back out of the derived file."""
     rsp_env = tmp_path / "rsp.env"
     conda_meta = tmp_path / "conda-meta"
     header = "#environment_name: lsst-scipipe-13.1.0-rsp\n" + RSP_ENV_HEADER
@@ -222,6 +208,38 @@ def test_environment_name_header_is_passed_through(tmp_path):
     assert result.returncode == 0, result.stderr
     with open(env["out"]) as f:
         assert f.readline().rstrip("\n") == "#environment_name: lsst-scipipe-13.1.0-rsp"
+
+
+def test_file_channel_packages_are_treated_as_packages(tmp_path):
+    """The prereleased-rubin-env path installs from a local file channel.
+
+    A file:// root must satisfy the missing-root check, and a file:// RSP-only
+    package must be filtered rather than copied through as a header line.
+    """
+    rsp_env = tmp_path / "rsp.env"
+    conda_meta = tmp_path / "conda-meta"
+    local = "file:///tmp/rubinenv-feedstock/build_artifacts/linux-64"
+    write_env(
+        rsp_env,
+        PACKAGES,
+        channels={"rubin-env": local, "rubin-env-rsp": local, "jupyterlab": local},
+    )
+    write_conda_meta(conda_meta, PACKAGES)
+    env = {
+        "rsp_env": str(rsp_env),
+        "conda_meta": str(conda_meta),
+        "out": str(tmp_path / "out.env"),
+    }
+    result = run(env)
+    assert result.returncode == 0, result.stderr
+    assert set(names_of(env["out"])) == RUBIN_ENV_REACHABLE
+    urls = urls_of(env["out"])
+    assert any(ln.startswith(local) for ln in urls)
+    # the file:// RSP-only packages are gone, not passed through verbatim
+    with open(env["out"]) as f:
+        out_text = f.read()
+    assert "jupyterlab" not in out_text
+    assert "rubin-env-rsp" not in out_text
 
 
 def test_missing_root_fails(env):
@@ -249,12 +267,7 @@ def test_conda_meta_missing_metadata_fails(tmp_path):
 
 
 def test_closure_violation_is_reported(tmp_path):
-    """A reachable package with no URL in the rsp list is a hard error.
-
-    This is the shape of the shipped bug -- libopencv needs qt6-main but no
-    qt6-main line is available -- and it must fail the build rather than being
-    written out.
-    """
+    """A reachable package with no URL in the rsp list must fail the build."""
     rsp_env = tmp_path / "rsp.env"
     conda_meta = tmp_path / "conda-meta"
     write_env(rsp_env, [p for p in PACKAGES if p[0] != "qt6-main"])

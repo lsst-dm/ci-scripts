@@ -6,20 +6,11 @@ exact build record and is published as ${tag}_rsp.env. ${tag}.env is the subset
 of that same solve which a non-RSP consumer needs, and is what `lsstinstall -X`
 installs.
 
-The subset is computed structurally: keep the packages reachable from the
-rubin-env metapackage by following `depends` edges *within the build env*.
-rubin-env-rsp depends on rubin-env, so rubin-env is present in the rsp solve and
-this is well defined. The result is dependency closed by construction, carries
-the exact versions the products were built against, and excludes RSP-only
-packages because they are not reachable from rubin-env.
-
-Do not reintroduce the previous approach of taking package *names* from a
-separate plain rubin-env solve and substituting versions in from the build env.
-Composing two solves is unsound: a build variant chosen by the rsp solve can
-require packages the rubin-env solve never pulled in. That shipped a Qt6-linked
-libopencv with qt6-main filtered out, and since @EXPLICIT files bypass the
-solver, conda installed it without complaint and consumers failed at
-`import cv2` with "libQt6Widgets.so.6: cannot open shared object file".
+The subset has to be computed from the build env itself, by keeping the packages
+reachable from rubin-env over `depends`. Taking the package names from a separate
+plain rubin-env solve does not work: the two solves can pick different build
+variants of the same package, and a variant chosen by the rsp solve may require
+packages the rubin-env solve never listed.
 """
 
 import argparse
@@ -28,8 +19,13 @@ import json
 import os
 import re
 import sys
+from urllib.parse import urlparse
 
 ARCHIVE_SUFFIXES = (".conda", ".tar.bz2")
+
+# conda explicit files may reference a local channel as well as a remote one;
+# the prereleased-rubin-env build path installs from a file channel.
+PACKAGE_SCHEMES = ("http", "https", "file")
 
 
 def die(msg):
@@ -37,17 +33,21 @@ def die(msg):
     sys.exit(1)
 
 
+def is_package_line(line):
+    """Return True if the line is a package URL rather than a comment/@EXPLICIT."""
+    return urlparse(line.strip()).scheme in PACKAGE_SCHEMES
+
+
 def pkgname(line):
     """Return the package name from a conda explicit URL line.
 
-    Strips the trailing '#md5', the URL path, the archive extension, and the
-    trailing '-<version>-<build>' fields. Package names may contain '-', so trim
-    the two trailing fields rather than splitting on '-'.
+    Package names may contain '-', so trim the trailing '-<version>-<build>'
+    fields rather than splitting on '-'.
     """
-    fn = line.split("#", 1)[0].strip().rsplit("/", 1)[-1]
+    fn = os.path.basename(urlparse(line.strip()).path)
     for suffix in ARCHIVE_SUFFIXES:
         if fn.endswith(suffix):
-            fn = fn[: -len(suffix)]
+            fn = fn.removesuffix(suffix)
             break
     return fn.rsplit("-", 2)[0]
 
@@ -60,10 +60,9 @@ def depname(spec):
 def read_rsp_env(path):
     """Return (lines, name -> url line) for a conda explicit file.
 
-    Non-URL lines are kept in `lines` so they can be reproduced in place. That
-    covers the conda header and @EXPLICIT, and also lsstsw's leading
-    '#environment_name:' line, which envconfig greps back out of the derived
-    file to rebuild against the same conda env.
+    Non-URL lines are kept in `lines` so they can be reproduced in place: the
+    conda header, @EXPLICIT, and lsstsw's leading '#environment_name:' line,
+    which envconfig greps back out of the derived file.
     """
     try:
         with open(path) as f:
@@ -73,7 +72,7 @@ def read_rsp_env(path):
 
     urls = {}
     for line in lines:
-        if not line.startswith("http"):
+        if not is_package_line(line):
             continue
         name = pkgname(line)
         if name in urls:
@@ -120,7 +119,7 @@ def reachable_from(roots, depends):
     return seen
 
 
-def main():
+def build_argparser():
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument(
         "--rsp-env",
@@ -144,29 +143,21 @@ def main():
         default=None,
         help="metapackage to walk from; repeatable (default: rubin-env)",
     )
-    args = parser.parse_args()
+    return parser
 
-    roots = args.root or ["rubin-env"]
 
-    conda_meta = args.conda_meta
-    if conda_meta is None:
-        prefix = os.environ.get("CONDA_PREFIX")
-        if not prefix:
-            die("--conda-meta not given and CONDA_PREFIX is unset; "
-                "is the build environment activated?")
-        conda_meta = os.path.join(prefix, "conda-meta")
-
-    lines, urls = read_rsp_env(args.rsp_env)
+def derive(rsp_env, out_path, conda_meta, roots):
+    """Write the subset of `rsp_env` reachable from `roots` to `out_path`."""
+    lines, urls = read_rsp_env(rsp_env)
     depends = read_conda_meta(conda_meta)
 
-    # Every package in the build record must have metadata in the same env.
-    # A mismatch means --conda-meta belongs to a different or stale env, and
-    # walking it would silently produce a partial file.
+    # A package in the build record with no metadata means --conda-meta belongs
+    # to a different or stale env; walking it would emit a partial file.
     without_meta = sorted(set(urls) - set(depends))
     if without_meta:
         die(
             f"--conda-meta {conda_meta} has no metadata for "
-            f"{len(without_meta)} package(s) listed in {args.rsp_env}; "
+            f"{len(without_meta)} package(s) listed in {rsp_env}; "
             f"it does not describe the same environment: "
             f"{', '.join(without_meta)}"
         )
@@ -174,18 +165,16 @@ def main():
     missing_roots = [r for r in roots if r not in urls]
     if missing_roots:
         die(
-            f"{args.rsp_env} does not contain root package(s) "
+            f"{rsp_env} does not contain root package(s) "
             f"{', '.join(missing_roots)}; rubin-env-rsp is expected to depend "
             f"on rubin-env"
         )
 
     reachable = reachable_from(roots, depends)
 
-    # Closure guard. Reachable by construction means this cannot trigger from
-    # the walk above, which is the point: it pins the invariant that every
-    # dependency of every emitted package resolves inside the emitted file, so
-    # a future change to this derivation cannot quietly publish an env that
-    # conda will install and then fail to import.
+    # Closure guard: the walk cannot violate this, which is the point -- it pins
+    # the invariant so a later change here cannot publish an env that installs
+    # and then fails to import.
     violations = {}
     for name in sorted(reachable):
         if name in urls:
@@ -197,7 +186,7 @@ def main():
         print(
             f"ERROR: derived env is not dependency closed -- "
             f"{len(violations)} package(s) reachable from "
-            f"{', '.join(roots)} have no entry in {args.rsp_env}:",
+            f"{', '.join(roots)} have no entry in {rsp_env}:",
             file=sys.stderr,
         )
         for name, parents in sorted(violations.items()):
@@ -206,22 +195,36 @@ def main():
 
     out = []
     for line in lines:
-        if not line.startswith("http"):
+        if not is_package_line(line):
             out.append(line)
         elif pkgname(line) in reachable:
             out.append(line)
 
     try:
-        with open(args.out, "w") as f:
+        with open(out_path, "w") as f:
             f.write("\n".join(out) + "\n")
     except OSError as e:
-        die(f"unable to write --out {args.out}: {e}")
+        die(f"unable to write --out {out_path}: {e}")
 
-    kept = sum(1 for line in out if line.startswith("http"))
+    kept = sum(1 for line in out if is_package_line(line))
     print(
-        f"derived {args.out}: {kept} of {len(urls)} packages from "
-        f"{args.rsp_env} (reachable from {', '.join(roots)})"
+        f"derived {out_path}: {kept} of {len(urls)} packages from "
+        f"{rsp_env} (reachable from {', '.join(roots)})"
     )
+
+
+def main():
+    args = build_argparser().parse_args()
+
+    conda_meta = args.conda_meta
+    if conda_meta is None:
+        prefix = os.environ.get("CONDA_PREFIX")
+        if not prefix:
+            die("--conda-meta not given and CONDA_PREFIX is unset; "
+                "is the build environment activated?")
+        conda_meta = os.path.join(prefix, "conda-meta")
+
+    derive(args.rsp_env, args.out, conda_meta, args.root or ["rubin-env"])
 
 
 if __name__ == "__main__":
