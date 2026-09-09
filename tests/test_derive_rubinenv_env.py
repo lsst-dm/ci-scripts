@@ -1,5 +1,6 @@
 """Tests for derive_rubinenv_env.py."""
 
+import importlib.util
 import json
 import os
 import subprocess
@@ -8,12 +9,21 @@ from urllib.parse import urlparse
 
 import pytest
 
-SCRIPT = os.path.join(
-    os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
-    "derive_rubinenv_env.py",
-)
+TESTS_DIR = os.path.dirname(os.path.abspath(__file__))
+SCRIPT = os.path.join(os.path.dirname(TESTS_DIR), "derive_rubinenv_env.py")
 
 CHANNEL = "https://conda.anaconda.org/conda-forge/linux-64"
+
+
+def _load_script():
+    """Import the script so its parsers can be exercised without subprocess."""
+    spec = importlib.util.spec_from_file_location("derive_rubinenv_env", SCRIPT)
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
+derive = _load_script()
 
 RSP_ENV_HEADER = """\
 # This file may be used to create an environment using:
@@ -282,3 +292,82 @@ def test_closure_violation_is_reported(tmp_path):
     assert "qt6-main" in result.stderr
     assert "libopencv" in result.stderr
     assert not os.path.exists(env["out"])
+
+
+# --- real published artifacts -------------------------------------------------
+#
+# tests/data holds the w_2026_36 pair from https://eups.lsst.cloud/stack/src/env:
+# the rubin-env-rsp build record, and the ${tag}.env the old two-solve derivation
+# produced from it. Vendored rather than fetched so the suite stays offline.
+
+DATA = os.path.join(TESTS_DIR, "data")
+REAL_RSP_ENV = os.path.join(DATA, "w_2026_36_rsp.env")
+REAL_ENV = os.path.join(DATA, "w_2026_36.env")
+
+REAL_HEADER = [
+    "#environment_name: lsst-scipipe-13.1.0-rsp",
+    "# This file may be used to create an environment using:",
+    "# $ conda create --name <env> --file <this file>",
+    "# platform: linux-64",
+    "# created-by: conda 26.5.3",
+    "@EXPLICIT",
+]
+
+
+def real_urls_by_name(path):
+    """Return name -> url line for a real published env file."""
+    with open(path) as f:
+        lines = f.read().splitlines()
+    return {derive.pkgname(ln): ln for ln in lines if derive.is_package_line(ln)}
+
+
+def test_real_env_file_lines_are_classified():
+    """Every line of a real file is a package URL or a reproducible header."""
+    with open(REAL_RSP_ENV) as f:
+        lines = f.read().splitlines()
+    packages = [ln for ln in lines if derive.is_package_line(ln)]
+    assert [ln for ln in lines if not derive.is_package_line(ln)] == REAL_HEADER
+    assert len(packages) == 1030
+    # published files omit the '#md5' that `conda list --explicit` emits
+    assert not any("#" in ln for ln in packages)
+
+
+def test_real_env_package_names_parse():
+    names = real_urls_by_name(REAL_RSP_ENV)
+    assert len(names) == 1030, "names must be unique within one solve"
+    assert {"rubin-env", "rubin-env-rsp", "rubin-env-nosysroot"} <= set(names)
+    # '_x86_64-microarch-level-4-3_icelake.conda' and a '.tar.bz2' entry
+    assert "_x86_64-microarch-level" in names
+    assert "font-ttf-dejavu-sans-mono" in names
+    assert not any(n.endswith(derive.ARCHIVE_SUFFIXES) or "/" in n for n in names)
+
+
+def test_published_pair_shares_byte_identical_urls():
+    """The subset must carry the build record's exact versions and builds."""
+    rsp = real_urls_by_name(REAL_RSP_ENV)
+    published = real_urls_by_name(REAL_ENV)
+    shared = set(rsp) & set(published)
+    assert len(shared) == 780
+    assert all(rsp[name] == published[name] for name in shared)
+
+
+def test_published_env_shows_the_two_solve_bug():
+    """Real-data shape of what this script replaces.
+
+    w_2026_36.env keeps the qt6_* libopencv build but drops qt6-main, and lists
+    six packages the build env never contained -- both impossible when the
+    subset is a closure of the build record.
+    """
+    rsp = real_urls_by_name(REAL_RSP_ENV)
+    published = real_urls_by_name(REAL_ENV)
+    assert "qt6_" in published["libopencv"]
+    assert "qt6-main" in rsp
+    assert "qt6-main" not in published
+    assert set(published) - set(rsp) == {
+        "flatbuffers",
+        "libdovi",
+        "libplacebo",
+        "onednn",
+        "onednn-cpu-threadpool",
+        "pybind11-abi",
+    }
