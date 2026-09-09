@@ -44,3 +44,9 @@ jobs:
 
       - name: yamllint
         run: yamllint .
+
+      - name: Install pytest
+        run: pip install pytest
+
+      - name: pytest
+        run: python -m pytest tests/ -v

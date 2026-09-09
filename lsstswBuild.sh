@@ -186,6 +186,12 @@ ARGS=()
 [[ ${#PRODUCT_LIST[@]} -ne 0 ]] &&
   ARGS+=("${PRODUCT_LIST[@]}")
 
+# rebuild derives ${BUILD}.env -- the non-RSP subset of its rubin-env-rsp build
+# env -- by delegating to this script, so that derivation has a single
+# implementation shared with release/tarball. Without it, rebuild falls back to
+# publishing the build env verbatim.
+export LSST_DERIVE_ENV_SCRIPT="${SCRIPT_DIR}/derive_rubinenv_env.py"
+
 if ! run "${LSSTSW}/bin/rebuild" "${ARGS[@]}"; then
   fail 'Failed during rebuild of DM stack.'
 fi
