@@ -23,6 +23,7 @@ set -xeo pipefail
 # * LSST_DEPLOY_MODE
 # * LSST_NO_FETCH
 # * LSST_PREP_ONLY
+# * LSST_PYTHON_PIN
 # * LSST_REFS
 #
 # removed/fatal:
@@ -45,6 +46,10 @@ LSST_NO_BINARY_FETCH=${LSST_NO_BINARY_FETCH:-true}
 LSST_PREP_ONLY=${LSST_PREP_ONLY:-false}
 LSST_GLIBC_FLAG=${LSST_GLIBC_FLAG:-false}
 LSST_ADD_RSP=${LSST_ADD_RSP:-false}
+# EXPERIMENTAL.  Empty means "let rubin-env pick python", which is the only
+# officially supported configuration and the only one the eups binary tarballs
+# are built for.  A pinned build gets its own environment and eups stack.
+LSST_PYTHON_PIN=${LSST_PYTHON_PIN:-}
 LSST_REFS=${LSST_REFS:-}
 
 fatal_vars() {
@@ -96,6 +101,11 @@ fi
 if [[ $LSST_ADD_RSP == true ]]; then
   OPTS+=('-R')
 fi
+# deploy refuses -y with -r/-x, so a pin combined with a hash or eups tag
+# LSST_SPLENV_REF fails there rather than being silently dropped here.
+if [[ -n $LSST_PYTHON_PIN ]]; then
+  OPTS+=('-y' "$LSST_PYTHON_PIN")
+fi
 
 # Force the conda solver to target glibc 2.17 so the rebuild's conda env
 # (captured in stack/src/env/<tag>.env via `conda list --explicit`) resolves
@@ -126,6 +136,11 @@ if [[ -z "$RUBINENV_ORG_FORK" ]]; then
     exit 1
   fi
   suffix=$([ "$LSST_ADD_RSP" = true ] && echo "-rsp" || echo "")
+  # Must match the name deploy built; deploy honours a pre-set
+  # LSST_CONDA_ENV_NAME, so this is what actually governs the name in CI.
+  if [[ -n $LSST_PYTHON_PIN ]]; then
+    suffix="${suffix}-py${LSST_PYTHON_PIN//./}"
+  fi
   LSST_CONDA_ENV_NAME="lsst-scipipe-${LSST_SPLENV_REF}${suffix}"
 else
   # build and deploy a rubinenv environment from fork/branch
